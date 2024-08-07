@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+from scipy.interpolate import griddata
 
 # Step 1: Define the dimensions
 time_dim = 540  # Number of time steps
@@ -34,20 +35,17 @@ lon_new = np.linspace(lon_flat.min(), lon_flat.max(), j_dim)
 lat_new = np.linspace(lat_flat.min(), lat_flat.max(), i_dim)
 lon_grid, lat_grid = np.meshgrid(lon_new, lat_new)
 
-# Step 5: Interpolate thick to the regular lat/lon grid
-thick_interp = xr.apply_ufunc(
-    np.vectorize(np.interp),
-    lat_grid, lon_grid, lat_flat, lon_flat,
-    ds['thick'].values.reshape((time_dim, -1)),
-    vectorize=True,
-    input_core_dims=[['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['time', 'space']],
-    output_core_dims=[['time', 'lat', 'lon']]
-)
+# Step 5: Initialize an empty array for the interpolated thick data
+thick_interp = np.empty((time_dim, i_dim, j_dim))
 
-# Reshape the interpolated data back into the new lat/lon dimensions
-thick_interp = thick_interp.reshape((time_dim, i_dim, j_dim))
+# Step 6: Perform the interpolation for each time step
+for t in range(time_dim):
+    thick_flat = ds['thick'].isel(time=t).values.flatten()
+    thick_interp[t, :, :] = griddata(
+        (lon_flat, lat_flat), thick_flat, (lon_grid, lat_grid), method='linear'
+    )
 
-# Step 6: Update the Dataset with the new dimensions
+# Step 7: Create the final Dataset with the new dimensions
 ds_final = xr.Dataset(
     {
         'thick': (['time', 'lat', 'lon'], thick_interp)
@@ -59,5 +57,5 @@ ds_final = xr.Dataset(
     }
 )
 
-# Step 7: Verify the structure
+# Step 8: Verify the structure
 print(ds_final)
